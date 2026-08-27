@@ -1,2 +1,2 @@
 pip install streamlit audio-recorder-streamlit google-generativeai
-GEMINI_API_KEY = "AQ.Ab8RN6JM_YMzUguhKme19dTI9laFp2pEaKDzojA5eEQR6nqrRw"
+GEMINI_API_KEY =
