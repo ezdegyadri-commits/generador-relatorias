@@ -81,11 +81,12 @@ if audio_path_temporal:
                 Redacta en un tono directivo, formal y claro para archivo oficial.
                 """
 
-                # Llamada al modelo oficial disponible
+               # Llamada al modelo con la versión solicitada por la API
                 response = client.models.generate_content(
-                    model='gemini-2.0-flash',
+                    model='gemini-3.6-flash',
                     contents=[prompt, audio_file]
                 )
+            
 
                 st.markdown("---")
                 st.header("📄 Relatoría Oficial USAER 2E")
