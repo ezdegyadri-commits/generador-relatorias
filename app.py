@@ -58,7 +58,7 @@ with col2:
     st.subheader("📝 Notas de Dirección")
     notas_directivo = st.text_area("Observaciones clave de la sesión (Opcional):", height=150)
 
-# 4. Procesamiento
+# 4. Procesamiento con Fallback Automático ante saturación (503)
 if audio_path_temporal:
     st.markdown("---")
     if st.button("🚀 Procesar Audio y Generar Relatoría Oficial", type="primary", use_container_width=True):
@@ -81,18 +81,30 @@ if audio_path_temporal:
                 Redacta en un tono directivo, formal y claro para archivo oficial.
                 """
 
-               # Llamada al modelo con la versión solicitada por la API
-                response = client.models.generate_content(
-                    model='gemini-3.6-flash',
-                    contents=[prompt, audio_file]
-                )
-            
+                # Lista de modelos en orden de prioridad por si hay alta demanda
+                modelos_a_probar = ['gemini-3.6-flash', 'gemini-1.5-pro', 'gemini-1.5-flash']
+                response = None
+                ultimo_error = None
 
-                st.markdown("---")
-                st.header("📄 Relatoría Oficial USAER 2E")
-                st.markdown(response.text)
+                for nombre_modelo in modelos_a_probar:
+                    try:
+                        response = client.models.generate_content(
+                            model=nombre_modelo,
+                            contents=[prompt, audio_file]
+                        )
+                        break  # Si tiene éxito, sale del ciclo
+                    except Exception as err:
+                        ultimo_error = err
+                        continue  # Si está saturado (503), pasa al siguiente modelo
 
-                # Limpieza
+                if response:
+                    st.markdown("---")
+                    st.header("📄 Relatoría Oficial USAER 2E")
+                    st.markdown(response.text)
+                else:
+                    st.error(f"Todos los servidores están saturados en este momento: {ultimo_error}")
+
+                # Limpieza de archivo temporal y en la nube
                 os.remove(audio_path_temporal)
                 client.files.delete(name=audio_file.name)
 
