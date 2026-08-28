@@ -2,6 +2,7 @@ import streamlit as st
 import tempfile
 import os
 import io
+import time
 from datetime import datetime
 
 # Clientes de IA
@@ -22,21 +23,21 @@ st.markdown("---")
 def generar_documento_oficial(contenido_relatoria):
     doc = Document()
     
-    # Inyectar la fecha actual con el formato del documento oficial
+    # Fecha oficial dinámica
     meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     hoy = datetime.now()
     fecha_str = f"Mérida, Yucatán a {hoy.day:02d} de {meses[hoy.month-1]} de {hoy.year}"
     
-    # Párrafo de fecha (Alineado a la derecha)
+    # Encabezado de Fecha
     p_fecha = doc.add_paragraph()
     r_fecha = p_fecha.add_run(fecha_str)
     r_fecha.font.name = 'Arial'
     r_fecha.font.size = Pt(11)
     p_fecha.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
-    doc.add_paragraph() # Espacio en blanco
+    doc.add_paragraph()
     
-    # Párrafo de Título (Centrado)
+    # Título oficial
     p_titulo = doc.add_paragraph()
     r_titulo = p_titulo.add_run("RELATORÍA")
     r_titulo.bold = True
@@ -44,37 +45,36 @@ def generar_documento_oficial(contenido_relatoria):
     r_titulo.font.size = Pt(12)
     p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    doc.add_paragraph() # Espacio en blanco
+    doc.add_paragraph()
     
-    # Insertar el contenido procesado por la IA (Manejo de Markdown básico a Word)
+    # Inserción de párrafos
     for linea in contenido_relatoria.split('\n'):
+        linea_limpia = linea.strip()
+        if not linea_limpia:
+            continue
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         
-        # Transformar títulos y negritas del formato Markdown
-        if linea.startswith('##') or linea.startswith('#'):
-            r = p.add_run(linea.replace('#', '').strip())
+        if linea_limpia.startswith('##') or linea_limpia.startswith('#'):
+            r = p.add_run(linea_limpia.replace('#', '').strip())
             r.bold = True
             r.font.size = Pt(12)
         else:
-            partes = linea.split('**') # Divide el texto donde haya asteriscos de negrita
+            partes = linea_limpia.split('**')
             for i, parte in enumerate(partes):
                 r = p.add_run(parte)
-                if i % 2 != 0:  # Si es impar, significa que estaba encerrado en **
+                if i % 2 != 0:
                     r.bold = True
         
-        # Aplicar fuente institucional a todo
         for run in p.runs:
             run.font.name = 'Arial'
             if not run.font.size:
                 run.font.size = Pt(11)
                 
-    # Guardar en memoria para descarga directa
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer
-
 
 # 2. Configuración en la Barra Lateral
 with st.sidebar:
@@ -113,7 +113,7 @@ with col2:
     st.subheader("📝 Notas de Dirección")
     notas_directivo = st.text_area("Observaciones clave de la sesión (Opcional):", height=150)
 
-# Estado de la sesión para mantener el texto generado en pantalla y permitir su descarga
+# Inicializar variable de estado para el texto
 if 'texto_relatoria' not in st.session_state:
     st.session_state.texto_relatoria = None
 
@@ -126,16 +126,16 @@ if audio_path_temporal:
         Actúa como el secretario técnico de la USAER 2E. Analiza el registro de la {num_sesion} del CTE.
         Enfoque: '{enfoque_especial}'. Notas directivas: '{notas_directivo}'.
 
-        Genera el contenido de la relatoría (sin título ni fecha, de eso me encargo yo). Estructura el texto directamente:
+        Genera el contenido de la relatoría (sin título ni fecha, se inyectan automáticamente). Estructura el texto directamente:
         1. **Contexto y Desarrollo:** Resumen del diálogo del colegiado.
         2. **Reflexiones y Retos Pedagógicos:** Puntos críticos analizados.
         3. **Acuerdos y Compromisos:** Tareas concretas acordadas.
         Redacta en un tono directivo, formal y claro para archivo oficial.
         """
 
-        # --- CHATGPT ---
+        # --- OPCIÓN 1: CHATGPT (OPENAI) ---
         if "ChatGPT" in motor_ia:
-            with st.spinner("Transcribiendo y redactando con ChatGPT..."):
+            with st.spinner("Transcribiendo con Whisper y redactando con GPT-4o..."):
                 try:
                     openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
                     with open(audio_path_temporal, "rb") as audio_file:
@@ -152,48 +152,42 @@ if audio_path_temporal:
                 except Exception as e:
                     st.error(f"Error con OpenAI: {e}")
 
-        # --- GEMINI ---
-       import time
+        # --- OPCIÓN 2: GEMINI CON RETRY AUTOMÁTICO ANTE 503 ---
+        else:
+            with st.spinner("Subiendo audio y redactando con Gemini..."):
+                try:
+                    gemini_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    audio_file = gemini_client.files.upload(file=audio_path_temporal)
 
-# --- GEMINI CON RETRY AUTOMÁTICO ANTE 503 ---
-else:
-    with st.spinner("Subiendo audio y redactando con Gemini (con reintento automático)..."):
-        try:
-            gemini_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-            audio_file = gemini_client.files.upload(file=audio_path_temporal)
+                    modelos_disponibles = ['gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-3.6-flash']
+                    response = None
 
-            # Lista de modelos por orden de estabilidad/rapidez
-            modelos_disponibles = ['gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-3.6-flash']
-            response = None
-            max_intentos = 3
+                    for nombre_modelo in modelos_disponibles:
+                        for intento in range(3):
+                            try:
+                                response = gemini_client.models.generate_content(
+                                    model=nombre_modelo,
+                                    contents=[prompt_relatoria, audio_file]
+                                )
+                                break
+                            except Exception as err:
+                                if "503" in str(err) or "UNAVAILABLE" in str(err):
+                                    time.sleep(2 ** intento)
+                                else:
+                                    break
+                        if response:
+                            break
 
-            for nombre_modelo in modelos_disponibles:
-                for intento in range(max_intentos):
-                    try:
-                        response = gemini_client.models.generate_content(
-                            model=nombre_modelo,
-                            contents=[prompt_relatoria, audio_file]
-                        )
-                        break  # Si tuvo éxito, sale del bucle de intentos
-                    except Exception as err:
-                        if "503" in str(err) or "UNAVAILABLE" in str(err):
-                            time.sleep(2 ** intento)  # Espera 1s, luego 2s, luego 4s
-                        else:
-                            raise err  # Si es otro error (ej. clave inválida), lo reporta de inmediato
-                
-                if response:
-                    break  # Si el modelo respondió, no intenta con los otros
+                    if response:
+                        st.session_state.texto_relatoria = response.text
+                    else:
+                        st.error("Servidores de Google en alta demanda temporal. Cambia a ChatGPT en el menú lateral.")
 
-            if response:
-                st.session_state.texto_relatoria = response.text
-            else:
-                st.error("Los servidores de Google siguen saturados. Selecciona ChatGPT en el menú lateral.")
+                    gemini_client.files.delete(name=audio_file.name)
+                except Exception as e:
+                    st.error(f"Error con Gemini: {e}")
 
-            gemini_client.files.delete(name=audio_file.name)
-        except Exception as e:
-            st.error(f"Error con Gemini: {e}")
-
-        # Limpieza de archivo temporal
+        # Limpieza de archivo local
         if os.path.exists(audio_path_temporal):
             os.remove(audio_path_temporal)
 
@@ -203,10 +197,8 @@ if st.session_state.texto_relatoria:
     st.header("📄 Vista Previa de la Relatoría")
     st.markdown(st.session_state.texto_relatoria)
     
-    # Generar el archivo DOCX en memoria
     archivo_docx = generar_documento_oficial(st.session_state.texto_relatoria)
     
-    # Botón de Descarga
     st.markdown("### 💾 Exportar Documento")
     st.download_button(
         label="📥 Descargar formato oficial (Compatible con Google Docs / Word)",
