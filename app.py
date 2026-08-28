@@ -153,19 +153,45 @@ if audio_path_temporal:
                     st.error(f"Error con OpenAI: {e}")
 
         # --- GEMINI ---
-        else:
-            with st.spinner("Subiendo audio y redactando con Gemini..."):
-                try:
-                    gemini_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                    audio_file = gemini_client.files.upload(file=audio_path_temporal)
-                    response = gemini_client.models.generate_content(
-                        model='gemini-3.6-flash',
-                        contents=[prompt_relatoria, audio_file]
-                    )
-                    st.session_state.texto_relatoria = response.text
-                    gemini_client.files.delete(name=audio_file.name)
-                except Exception as e:
-                    st.error(f"Error con Gemini: {e}")
+       import time
+
+# --- GEMINI CON RETRY AUTOMÁTICO ANTE 503 ---
+else:
+    with st.spinner("Subiendo audio y redactando con Gemini (con reintento automático)..."):
+        try:
+            gemini_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+            audio_file = gemini_client.files.upload(file=audio_path_temporal)
+
+            # Lista de modelos por orden de estabilidad/rapidez
+            modelos_disponibles = ['gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-3.6-flash']
+            response = None
+            max_intentos = 3
+
+            for nombre_modelo in modelos_disponibles:
+                for intento in range(max_intentos):
+                    try:
+                        response = gemini_client.models.generate_content(
+                            model=nombre_modelo,
+                            contents=[prompt_relatoria, audio_file]
+                        )
+                        break  # Si tuvo éxito, sale del bucle de intentos
+                    except Exception as err:
+                        if "503" in str(err) or "UNAVAILABLE" in str(err):
+                            time.sleep(2 ** intento)  # Espera 1s, luego 2s, luego 4s
+                        else:
+                            raise err  # Si es otro error (ej. clave inválida), lo reporta de inmediato
+                
+                if response:
+                    break  # Si el modelo respondió, no intenta con los otros
+
+            if response:
+                st.session_state.texto_relatoria = response.text
+            else:
+                st.error("Los servidores de Google siguen saturados. Selecciona ChatGPT en el menú lateral.")
+
+            gemini_client.files.delete(name=audio_file.name)
+        except Exception as e:
+            st.error(f"Error con Gemini: {e}")
 
         # Limpieza de archivo temporal
         if os.path.exists(audio_path_temporal):
