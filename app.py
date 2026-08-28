@@ -159,7 +159,7 @@ if audio_path_temporal:
                     gemini_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     audio_file = gemini_client.files.upload(file=audio_path_temporal)
                     response = gemini_client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-3.6-flash',
                         contents=[prompt_relatoria, audio_file]
                     )
                     st.session_state.texto_relatoria = response.text
