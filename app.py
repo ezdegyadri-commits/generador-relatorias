@@ -51,7 +51,7 @@ class PlantillaOficialYucatan(canvas.Canvas):
             self.drawImage("pie_pagina.png", 0, 0, width=ancho, height=50, preserveAspectRatio=True, mask='auto')
 
 # Función que genera el documento PDF oficial
-def generar_pdf_oficial(contenido_relatoria):
+def generar_pdf_oficial(contenido_relatoria, num_asistentes):
     buffer = io.BytesIO()
     
     doc = SimpleDocTemplate(
@@ -101,21 +101,19 @@ def generar_pdf_oficial(contenido_relatoria):
             elementos.append(Paragraph(texto_html, estilo_cuerpo))
             
     # --- Bloque de Firma de la Dirección y Sello ---
-    elementos.append(Spacer(1, 50)) # Espacio antes de la firma
+    elementos.append(Spacer(1, 50)) 
     
-    # Textos de la firma
+    # Textos de la firma actualizados
     p_linea = Paragraph("___________________________________", estilo_firma)
-    p_nombre = Paragraph("Edgar Adrian Yam Briceño", estilo_firma_negrita)
+    p_nombre = Paragraph("Psic. Edgar Adrián Yam Briceño MD", estilo_firma_negrita)
     p_cargo = Paragraph("Director de la USAER 02 Estatal", estilo_firma)
     
     columna_firma = [p_linea, p_nombre, p_cargo]
     
-    # Verificar si existe el sello
     columna_sello = ""
     if os.path.exists("sello.png"):
         columna_sello = RLImage("sello.png", width=1.5*inch, height=1.5*inch)
         
-    # Tabla transparente para alinear Firma (Izquierda/Centro) y Sello (Derecha)
     tabla_direccion = Table([[columna_firma, columna_sello]], colWidths=[4.5*inch, 2*inch])
     tabla_direccion.setStyle(TableStyle([
         ('ALIGN', (0,0), (0,0), 'CENTER'),
@@ -124,23 +122,18 @@ def generar_pdf_oficial(contenido_relatoria):
     ]))
     elementos.append(tabla_direccion)
     
-    # --- Tabla de Asistencia del Personal ---
+    # --- Tabla de Asistencia del Personal (Dinámica) ---
     elementos.append(Spacer(1, 30))
     elementos.append(Paragraph("FIRMAS DEL PERSONAL ASISTENTE", estilo_subtitulo))
     elementos.append(Spacer(1, 10))
     
-    # Estructura de la tabla (6 filas en blanco para imprimir y firmar con bolígrafo)
-    datos_personal = [
-        ["Nombre del Docente / Especialista", "Función", "Firma"],
-        ["", "", ""],
-        ["", "", ""],
-        ["", "", ""],
-        ["", "", ""],
-        ["", "", ""],
-        ["", "", ""]
-    ]
+    # Generación de filas dinámicas según el número de asistentes
+    datos_personal = [["Nombre del Docente / Especialista", "Función", "Firma"]]
+    for _ in range(num_asistentes):
+        datos_personal.append(["", "", ""])
     
-    tabla_personal = Table(datos_personal, colWidths=[3.2*inch, 1.8*inch, 2.0*inch], rowHeights=[25]*7)
+    # La altura de las filas se ajusta a la cantidad total (encabezado + asistentes)
+    tabla_personal = Table(datos_personal, colWidths=[3.2*inch, 1.8*inch, 2.0*inch], rowHeights=[25] * (num_asistentes + 1))
     tabla_personal.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 1, colors.black),
         ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -160,8 +153,10 @@ with st.sidebar:
     st.header("⚙️ Ajustes")
     motor_ia = st.radio("Motor de IA:", ["ChatGPT (OpenAI)", "Gemini (Google)"])
     st.markdown("---")
-    num_sesion = st.selectbox("Sesión de CTE:", ["Fase Intensiva", "Primera Sesión", "Segunda Sesión", "Tercera Sesión"])
+    num_sesion = st.selectbox("Sesión de CTE:", ["Fase Intensiva", "Primera Sesión", "Segunda Sesión", "Tercera Sesión", "Cuarta Sesión", "Quinta Sesión", "Sexta Sesión", "Séptima Sesión", "Octava Sesión"])
     enfoque_especial = st.text_input("Tema central:", placeholder="Ej. Ajustes razonables, BAP...")
+    # Nuevo selector numérico para los asistentes
+    num_asistentes = st.number_input("Número de asistentes (para firmas):", min_value=1, max_value=30, value=6, step=1)
 
 # 3. Captura
 st.subheader("🎙️ Captura de Audio de la Plenaria")
@@ -264,7 +259,8 @@ if st.session_state.texto_relatoria:
     st.header("📄 Vista Previa")
     st.markdown(st.session_state.texto_relatoria)
     
-    pdf_bytes = generar_pdf_oficial(st.session_state.texto_relatoria)
+    # Se envía la cantidad de asistentes para generar el PDF
+    pdf_bytes = generar_pdf_oficial(st.session_state.texto_relatoria, num_asistentes)
     
     st.markdown("### 💾 Exportación Oficial")
     st.download_button(
