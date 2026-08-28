@@ -1,4 +1,4 @@
 streamlit
 google-genai
 openai
-python-docx
+reportlab
