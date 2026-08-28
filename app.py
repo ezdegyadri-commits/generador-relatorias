@@ -22,7 +22,7 @@ st.set_page_config(page_title="Panel Directivo - Relatoría CTE", page_icon="�
 st.title("🎛️ Panel de Control Directivo: CTE USAER 2E")
 st.markdown("---")
 
-# Clase Canvas personalizada: Membrete de borde a borde
+# Clase Canvas personalizada: Membrete de borde a borde y anclado
 class PlantillaOficialYucatan(canvas.Canvas):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -42,35 +42,37 @@ class PlantillaOficialYucatan(canvas.Canvas):
     def dibujar_membrete(self):
         ancho, alto = letter
         
-        # ENCABEZADO: x=0, ancho=total del papel
+        # ENCABEZADO: Borde a borde, anclado al límite superior ('n' = north)
         if os.path.exists("encabezado.png"):
-            self.drawImage("encabezado.png", 0, alto - 90, width=ancho, height=90, preserveAspectRatio=True, mask='auto')
+            self.drawImage("encabezado.png", 0, alto - 110, width=ancho, height=110, preserveAspectRatio=True, mask='auto', anchor='n')
         
-        # PIE DE PÁGINA: x=0, ancho=total del papel, anclado al fondo (y=0)
+        # PIE DE PÁGINA: Borde a borde, anclado al límite inferior ('s' = south)
         if os.path.exists("pie_pagina.png"):
-            self.drawImage("pie_pagina.png", 0, 0, width=ancho, height=50, preserveAspectRatio=True, mask='auto')
+            self.drawImage("pie_pagina.png", 0, 0, width=ancho, height=90, preserveAspectRatio=True, mask='auto', anchor='s')
 
 # Función que genera el documento PDF oficial
 def generar_pdf_oficial(contenido_relatoria, num_asistentes):
     buffer = io.BytesIO()
     
+    # Ajuste de márgenes para que el texto (tamaño 12) fluya correctamente entre las imágenes
     doc = SimpleDocTemplate(
         buffer,
         pagesize=letter,
         leftMargin=54,
         rightMargin=54,
-        topMargin=95,
-        bottomMargin=70
+        topMargin=115,
+        bottomMargin=85
     )
     
     styles = getSampleStyleSheet()
     
-    estilo_fecha = ParagraphStyle('Fecha', parent=styles['Normal'], fontName='Helvetica', fontSize=10, alignment=2)
-    estilo_titulo = ParagraphStyle('TituloRelatoria', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=12, alignment=1)
-    estilo_subtitulo = ParagraphStyle('Subtitulo', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=11, spaceBefore=10, spaceAfter=4)
-    estilo_cuerpo = ParagraphStyle('Cuerpo', parent=styles['Normal'], fontName='Helvetica', fontSize=10, leading=14, alignment=4, spaceAfter=6)
-    estilo_firma = ParagraphStyle('Firma', parent=styles['Normal'], fontName='Helvetica', fontSize=10, alignment=1)
-    estilo_firma_negrita = ParagraphStyle('FirmaN', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, alignment=1)
+    # APLICACIÓN DE FUENTE TAMAÑO 12 (Helvetica es el equivalente nativo de Arial en PDF)
+    estilo_fecha = ParagraphStyle('Fecha', parent=styles['Normal'], fontName='Helvetica', fontSize=12, leading=16, alignment=2)
+    estilo_titulo = ParagraphStyle('TituloRelatoria', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=14, leading=18, alignment=1)
+    estilo_subtitulo = ParagraphStyle('Subtitulo', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=12, leading=16, spaceBefore=12, spaceAfter=6)
+    estilo_cuerpo = ParagraphStyle('Cuerpo', parent=styles['Normal'], fontName='Helvetica', fontSize=12, leading=16, alignment=4, spaceAfter=8)
+    estilo_firma = ParagraphStyle('Firma', parent=styles['Normal'], fontName='Helvetica', fontSize=12, leading=14, alignment=1)
+    estilo_firma_negrita = ParagraphStyle('FirmaN', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=12, leading=14, alignment=1)
     
     elementos = []
     
@@ -103,7 +105,6 @@ def generar_pdf_oficial(contenido_relatoria, num_asistentes):
     # --- Bloque de Firma de la Dirección y Sello ---
     elementos.append(Spacer(1, 50)) 
     
-    # Textos de la firma actualizados
     p_linea = Paragraph("___________________________________", estilo_firma)
     p_nombre = Paragraph("Psic. Edgar Adrián Yam Briceño MD", estilo_firma_negrita)
     p_cargo = Paragraph("Director de la USAER 02 Estatal", estilo_firma)
@@ -123,16 +124,15 @@ def generar_pdf_oficial(contenido_relatoria, num_asistentes):
     elementos.append(tabla_direccion)
     
     # --- Tabla de Asistencia del Personal (Dinámica) ---
-    elementos.append(Spacer(1, 30))
+    elementos.append(Spacer(1, 40))
     elementos.append(Paragraph("FIRMAS DEL PERSONAL ASISTENTE", estilo_subtitulo))
     elementos.append(Spacer(1, 10))
     
-    # Generación de filas dinámicas según el número de asistentes
+    # Generación de filas dinámicas
     datos_personal = [["Nombre del Docente / Especialista", "Función", "Firma"]]
     for _ in range(num_asistentes):
         datos_personal.append(["", "", ""])
     
-    # La altura de las filas se ajusta a la cantidad total (encabezado + asistentes)
     tabla_personal = Table(datos_personal, colWidths=[3.2*inch, 1.8*inch, 2.0*inch], rowHeights=[25] * (num_asistentes + 1))
     tabla_personal.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 1, colors.black),
@@ -140,7 +140,7 @@ def generar_pdf_oficial(contenido_relatoria, num_asistentes):
         ('ALIGN', (0,0), (-1,0), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 9),
+        ('FONTSIZE', (0,0), (-1,0), 10),
     ]))
     elementos.append(tabla_personal)
     
@@ -155,7 +155,6 @@ with st.sidebar:
     st.markdown("---")
     num_sesion = st.selectbox("Sesión de CTE:", ["Fase Intensiva", "Primera Sesión", "Segunda Sesión", "Tercera Sesión", "Cuarta Sesión", "Quinta Sesión", "Sexta Sesión", "Séptima Sesión", "Octava Sesión"])
     enfoque_especial = st.text_input("Tema central:", placeholder="Ej. Ajustes razonables, BAP...")
-    # Nuevo selector numérico para los asistentes
     num_asistentes = st.number_input("Número de asistentes (para firmas):", min_value=1, max_value=30, value=6, step=1)
 
 # 3. Captura
@@ -259,7 +258,6 @@ if st.session_state.texto_relatoria:
     st.header("📄 Vista Previa")
     st.markdown(st.session_state.texto_relatoria)
     
-    # Se envía la cantidad de asistentes para generar el PDF
     pdf_bytes = generar_pdf_oficial(st.session_state.texto_relatoria, num_asistentes)
     
     st.markdown("### 💾 Exportación Oficial")
