@@ -1,35 +1,39 @@
 import streamlit as st
-from google import genai
-from google.genai import types
 import tempfile
 import os
 
-# 1. Configuración del Panel
+# Clientes de IA
+from openai import OpenAI
+from google import genai
+
+# 1. Configuración de la interfaz
 st.set_page_config(page_title="Panel Directivo - Relatoría CTE", page_icon="🎛️", layout="wide")
-
-# 2. Autenticación con el nuevo cliente oficial
-try:
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-except KeyError:
-    st.error("Falta configurar la clave GEMINI_API_KEY en los Secrets de Streamlit.")
-    st.stop()
-except Exception as e:
-    st.error(f"Error de autenticación: {e}")
-    st.stop()
-
 st.title("🎛️ Panel de Control Directivo: CTE USAER 2E")
 st.markdown("---")
 
+# 2. Configuración en la Barra Lateral
 with st.sidebar:
-    st.header("⚙️ Ajustes de la Sesión")
-    num_sesion = st.selectbox("Sesión de CTE:", ["Fase Intensiva", "Primera Sesión", "Segunda Sesión", "Tercera Sesión"])
+    st.header("⚙️ Motor de IA y Ajustes")
+    
+    # Selector de Inteligencia Artificial para contingencias
+    motor_ia = st.radio(
+        "Selecciona el motor de IA:",
+        ["ChatGPT (OpenAI - Alta estabilidad)", "Gemini (Google)"]
+    )
+    
+    st.markdown("---")
+    num_sesion = st.selectbox(
+        "Sesión de CTE:",
+        ["Fase Intensiva", "Primera Sesión Ordinaria", "Segunda Sesión Ordinaria", "Tercera Sesión Ordinaria"]
+    )
     enfoque_especial = st.text_input("Tema central:", placeholder="Ej. Ajustes razonables, BAP...")
+    st.info("ℹ️ **Consejo Directivo:** Si un servidor presenta saturación, puedes cambiar de motor en cualquier momento sin perder la sesión.")
 
-# 3. Selector de captura
+# 3. Métodos de Captura de Audio
 st.subheader("🎙️ Captura de Audio de la Plenaria")
 modo_grabacion = st.radio(
-    "Selecciona el método de captura:", 
-    ["Subir archivo (Recomendado para exponer/cambiar pestañas)", "Grabar en el navegador"],
+    "Método de captura:", 
+    ["Subir archivo de audio (Recomendado para no interrumpir exposición)", "Grabar en el navegador"],
     horizontal=True
 )
 
@@ -38,15 +42,15 @@ col1, col2 = st.columns([1.5, 1])
 
 with col1:
     if "Subir" in modo_grabacion:
-        st.info("💡 Graba con la app de voz de tu dispositivo en segundo plano y sube el archivo al finalizar.")
-        archivo_subido = st.file_uploader("Arrastra tu archivo de audio (MP3, WAV, M4A)", type=["wav", "mp3", "m4a"])
+        st.info("💡 Graba con la grabadora nativa de tu laptop/teléfono en segundo plano y sube el archivo al concluir.")
+        archivo_subido = st.file_uploader("Arrastra tu archivo (MP3, WAV, M4A)", type=["wav", "mp3", "m4a"])
         if archivo_subido:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
                 tmp_file.write(archivo_subido.getvalue())
                 audio_path_temporal = tmp_file.name
             st.success("Archivo listo para procesar.")
     else:
-        st.warning("⚠️ Mantén la pestaña visible para evitar que el navegador suspenda la grabación.")
+        st.warning("⚠️ Mantén la pestaña visible para evitar que el navegador suspenda el micrófono.")
         audio_grabado = st.audio_input("Haz clic para grabar en vivo")
         if audio_grabado:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
@@ -58,55 +62,76 @@ with col2:
     st.subheader("📝 Notas de Dirección")
     notas_directivo = st.text_area("Observaciones clave de la sesión (Opcional):", height=150)
 
-# 4. Procesamiento con Fallback Automático ante saturación (503)
+# 4. Procesamiento Inteligente
 if audio_path_temporal:
     st.markdown("---")
     if st.button("🚀 Procesar Audio y Generar Relatoría Oficial", type="primary", use_container_width=True):
-        with st.spinner("Subiendo audio y redactando relatoría con Gemini..."):
-            try:
-                # Subir archivo usando el nuevo SDK
-                audio_file = client.files.upload(file=audio_path_temporal)
+        
+        prompt_relatoria = f"""
+        Actúa como el secretario técnico y asistente de dirección de la USAER 2E.
+        Analiza el registro de la {num_sesion} del Consejo Técnico Escolar.
+        Enfoque de la sesión: '{enfoque_especial}'.
+        Notas directivas adicionales: '{notas_directivo}'.
 
-                prompt = f"""
-                Actúa como el secretario técnico y asistente de dirección de la USAER 2E. 
-                Escucha el archivo de audio adjunto, correspondiente a la {num_sesion} del Consejo Técnico Escolar.
-                Enfoque de la sesión: '{enfoque_especial}'.
-                Notas de dirección: '{notas_directivo}'.
+        Genera una relatoría institucional estructurada en Markdown:
+        1. **Contexto y Desarrollo:** Resumen del diálogo del colegiado.
+        2. **Reflexiones y Retos Pedagógicos:** Puntos críticos analizados sobre la práctica docente.
+        3. **Acuerdos y Compromisos:** Decisiones y tareas concretas acordadas.
 
-                Genera una relatoría institucional estructurada en Markdown:
-                1. **Contexto y Desarrollo:** Resumen del diálogo del colegiado.
-                2. **Reflexiones y Retos:** Puntos críticos analizados sobre la práctica docente.
-                3. **Acuerdos y Compromisos:** Decisiones concretas tomadas.
+        Redacta en un tono directivo, formal y claro para archivo oficial.
+        """
 
-                Redacta en un tono directivo, formal y claro para archivo oficial.
-                """
-
-                # Lista de modelos en orden de prioridad por si hay alta demanda
-                modelos_a_probar = ['gemini-3.6-flash', 'gemini-1.5-pro', 'gemini-1.5-flash']
-                response = None
-                ultimo_error = None
-
-                for nombre_modelo in modelos_a_probar:
-                    try:
-                        response = client.models.generate_content(
-                            model=nombre_modelo,
-                            contents=[prompt, audio_file]
+        # --- OPCIÓN A: PROCESAMIENTO CON CHATGPT (OPENAI) ---
+        if "ChatGPT" in motor_ia:
+            with st.spinner("Transcribiendo con Whisper y redactando con GPT-4o..."):
+                try:
+                    openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+                    
+                    # 1. Transcripción con Whisper
+                    with open(audio_path_temporal, "rb") as audio_file:
+                        transcripcion = openai_client.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=audio_file
                         )
-                        break  # Si tiene éxito, sale del ciclo
-                    except Exception as err:
-                        ultimo_error = err
-                        continue  # Si está saturado (503), pasa al siguiente modelo
+                    
+                    # 2. Redacción con GPT-4o
+                    response = openai_client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "Eres un redactor técnico institucional experto en educación especial y gestión escolar."},
+                            {"role": "user", "content": f"{prompt_relatoria}\n\nTranscripción del audio:\n{transcripcion.text}"}
+                        ]
+                    )
 
-                if response:
                     st.markdown("---")
-                    st.header("📄 Relatoría Oficial USAER 2E")
+                    st.header("📄 Relatoría Oficial USAER 2E (Generada con GPT-4o)")
+                    st.markdown(response.choices[0].message.content)
+
+                except Exception as e:
+                    st.error(f"Error con OpenAI: {e}")
+                finally:
+                    if os.path.exists(audio_path_temporal):
+                        os.remove(audio_path_temporal)
+
+        # --- OPCIÓN B: PROCESAMIENTO CON GEMINI ---
+        else:
+            with st.spinner("Subiendo audio y redactando relatoría con Gemini..."):
+                try:
+                    gemini_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    audio_file = gemini_client.files.upload(file=audio_path_temporal)
+
+                    response = gemini_client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=[prompt_relatoria, audio_file]
+                    )
+
+                    st.markdown("---")
+                    st.header("📄 Relatoría Oficial USAER 2E (Generada con Gemini)")
                     st.markdown(response.text)
-                else:
-                    st.error(f"Todos los servidores están saturados en este momento: {ultimo_error}")
 
-                # Limpieza de archivo temporal y en la nube
-                os.remove(audio_path_temporal)
-                client.files.delete(name=audio_file.name)
-
-            except Exception as e:
-                st.error(f"Error al procesar: {e}")
+                    gemini_client.files.delete(name=audio_file.name)
+                except Exception as e:
+                    st.error(f"Error con Gemini: {e}")
+                finally:
+                    if os.path.exists(audio_path_temporal):
+                        os.remove(audio_path_temporal)
